@@ -12,6 +12,7 @@ RUN npm run build
 FROM python:3.14-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng \
+ && (apt-get install -y --no-install-recommends libglib2.0-0t64 || apt-get install -y --no-install-recommends libglib2.0-0) \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY backend/requirements.txt backend/requirements.txt
@@ -22,9 +23,12 @@ COPY data data
 COPY samples samples
 COPY --from=web /web/dist frontend/dist
 
-# Hosted settings: files go to temporary disk (copies are kept in the database), runs start inside the live stream.
+# Hosted settings: everything written goes under /tmp (the only disk a serverless container can be sure to write),
+# copies of files are kept in the database, and runs start inside the live stream.
 ENV TESSERACT_CMD=/usr/bin/tesseract \
+    AP_DB=/tmp/vouch.db \
     AP_STORAGE=/tmp/vouch-storage \
+    PYTHONDONTWRITEBYTECODE=1 \
     RUN_IN_STREAM=1 \
     PYTHONUNBUFFERED=1
 
