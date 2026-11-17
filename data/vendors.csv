@@ -1,0 +1,5 @@
+vendor_id,name,gstin,state,msme,bank_account,ifsc,email_domains,contact_email,phone,payment_terms_days,addr
+V001,Acme Supplies Pvt Ltd,06AABCA1234Q1ZQ,06,,50200011342210,HDFC0001234,acmesupplies.com,accounts@acmesupplies.com,+91 98110 44410,30,"Sector 37, Gurugram, Haryana 122001"
+V002,Bharat Steel Traders,07AAACB4321M1ZU,07,small,00881234568834,SBIN0000881,bharatsteel.co.in,accounts@bharatsteel.co.in,+91 98101 22871,21,"Naraina Industrial Area, New Delhi 110028"
+V003,Northwind IT Services Pvt Ltd,29AAGCN7788P1Z7,29,,912010000450457,UTIB0000123,northwindit.in,accounts@northwindit.in,+91 80 4110 2290,30,"Koramangala, Bengaluru, Karnataka 560034"
+V004,Kumar Packaging,06BQZPK2266H1ZC,06,micro,3812005129,PUNB0123400,kumarpackaging.in,accounts@kumarpackaging.in,+91 99100 31187,15,"Sector 6, Faridabad, Haryana 121006"

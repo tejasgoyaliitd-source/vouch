@@ -1,0 +1,13 @@
+**/.env
+**/.env.*
+!**/.env.example
+**/.venv
+**/node_modules
+**/__pycache__
+frontend/dist
+backend/storage
+backend/tests
+backend/*.db*
+samples/_src
+scripts
+.git

@@ -1,0 +1,2 @@
+# Store every file byte for byte. Sample PDFs and emails must not have their line endings changed.
+* -text

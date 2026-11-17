@@ -1,0 +1,11 @@
+backend/.venv/
+backend/ap.db*
+backend/storage/
+backend/tests/*.db*
+frontend/node_modules/
+frontend/dist/
+samples/_src/
+__pycache__/
+backend/.env
+backend/.env.*
+!backend/.env.example

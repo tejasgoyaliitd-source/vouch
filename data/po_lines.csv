@@ -1,0 +1,9 @@
+po_no,line_no,item_code,description,hsn,qty,unit_price,gst_rate
+PO-4471,1,PAPA4,"Copier paper A4, 500 sheets (box)",4802,80,900,18
+PO-4471,2,TN2400,Toner cartridge TN-2400,8443,24,2500,18
+PO-4471,3,DLV,Delivery charges,9965,2,6000,18
+PO-4502,1,SB40,Steel bracket SB-40,7326,100,450,18
+PO-4390,1,SUP40,"Annual support, 40 laptops",9987,1,200000,18
+PO-4519,1,CTN5,Corrugated carton 5-ply,4819,300,30,18
+PO-4519,2,CTN3S,Carton 3-ply small,4819,120,50,18
+PO-4388,1,TAPE48,BOPP tape roll 48mm,3919,500,22,18
