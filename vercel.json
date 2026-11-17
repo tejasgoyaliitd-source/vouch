@@ -1,5 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "container",
+  "services": {
+    "vouch": {
+      "root": ".",
+      "runtime": "container",
+      "entrypoint": "Dockerfile"
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": { "service": "vouch" } }],
   "regions": ["sin1"]
 }
