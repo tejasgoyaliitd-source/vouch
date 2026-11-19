@@ -57,7 +57,7 @@ function ProfileMenu() {
             </button>
           ))}
           <div className="my-1 border-t border-line" />
-          {user.key === 'ap_manager' && (
+          {user.key !== 'auditor' && (
             <button onClick={restore} className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] hover:bg-paper"><RotateCcw size={15} className="text-ink-2" />Restore starting data</button>
           )}
           <button onClick={signOut} className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] hover:bg-paper"><LogOut size={15} className="text-ink-2" />Sign out</button>

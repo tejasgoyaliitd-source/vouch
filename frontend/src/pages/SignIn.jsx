@@ -27,7 +27,7 @@ export default function SignIn() {
             ))}
           </ul>
         </div>
-        <p className="mt-4 text-center text-[12px] text-ink-3">Neha can release security holds and restore the starting data. Vikram can see everything but change nothing.</p>
+        <p className="mt-4 text-center text-[12px] text-ink-3">Neha can release security holds. Vikram can see everything but change nothing.</p>
       </div>
     </div>
   )

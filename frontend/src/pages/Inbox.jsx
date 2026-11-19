@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Paperclip, Upload, Mail, Smartphone, Play, FlaskConical, Download, Check, Minus } from 'lucide-react'
+import { Paperclip, Upload, Mail, Smartphone, Play, FlaskConical, Download, Check, Minus, RotateCcw } from 'lucide-react'
 import { get, post, tooBig } from '../api.js'
 import { InfoTip, PageHead, Segmented, StatusChip, STATUS, fmtDay, fmtTime, inr } from '../ui.jsx'
 import { go } from '../App.jsx'
@@ -202,6 +202,14 @@ export default function Inbox() {
     await refresh()
   }
 
+  // Puts the sample emails back. Hosted, only this visitor's copy is reset (see db.reset).
+  const startOver = async () => {
+    if (!confirm('Start over? The sample emails go back in the inbox, and everything processed in this browser is cleared. Nobody else\'s copy changes.')) return
+    try { await post('/demo/reset'); window.location.hash = '#/inbox'; window.location.reload() } catch (e) { setErr('Could not start over: ' + e.message) }
+  }
+  const allDone = canRun && toProcess === 0 && processed.length > 0
+  const startOverBtn = <button className="btn" onClick={startOver}><RotateCcw size={14} aria-hidden="true" />Start over</button>
+
   const onDragOver = (e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDrag(true) } }
   const onDragLeave = (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDrag(false) }
   const onDrop = (e) => { e.preventDefault(); setDrag(false); addFiles(e.dataTransfer.files) }
@@ -230,9 +238,22 @@ export default function Inbox() {
             <div className="mb-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2"><Summary runs={runs} /><StepLegend /></div>
           )}
           <ul className="panel divide-y divide-line">
-            {rows.length === 0 && <li className="py-8 text-center text-[13px] text-ink-3">Inbox clear. Upload files or drop them here to add more.</li>}
+            {rows.length === 0 && (
+              <li className="flex flex-col items-center gap-3 px-4 py-9 text-center text-[13px] text-ink-3">
+                {allDone ? <>
+                  <span><span className="font-medium text-ink">Inbox clear.</span> Everything that came in is processed. Start over to put the sample emails back, or upload your own files.</span>
+                  {startOverBtn}
+                </> : 'Inbox clear. Upload files or drop them here to add more.'}
+              </li>
+            )}
             {rows.map((it) => <Row key={it.key} it={it} run={runs[it.key]} canRun={canRun} onProcess={(x) => enqueue([x])} expect={expectOf(it)} showTests={showTests} />)}
           </ul>
+          {allDone && rows.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-white px-4 py-3">
+              <p className="text-[13px] text-ink-2">All done. To run the sample emails again, start over. This clears what you processed in this browser only.</p>
+              {startOverBtn}
+            </div>
+          )}
         </>
       )}
 

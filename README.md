@@ -10,8 +10,9 @@ Zamp AI Solutions Associate case, PS-1. A vendor invoice arrives by email or upl
 2. In **Inbox**, click **Process all**. Each row fills in a 12-step map as it runs; open any row with **View steps** to see every check and the evidence behind it.
 3. Click **Test files** to download the files below, then upload them (or drag them onto the inbox) and compare each result with the expected one. The pipeline never reads file names; rename them if you like.
 4. Upload an invoice of your own.
+5. When the inbox is empty, click **Start over** to put the five sample emails back. Each browser gets its own copy of the data, so starting over never affects anyone else.
 
-Other people: **Neha Kapoor** (AP manager) releases security holds and can restore the starting data. **Vikram Shah** (internal audit) can see everything and change nothing.
+Other people: **Neha Kapoor** (AP manager) releases security holds. **Vikram Shah** (internal audit) can see everything and change nothing.
 
 ## Test files (`samples/test_pack/`)
 
@@ -25,7 +26,7 @@ Other people: **Neha Kapoor** (AP manager) releases security holds and can resto
 | `06_vendor_not_onboarded.pdf` | A supplier nobody has onboarded, no PO quoted | On hold: find out who ordered it |
 | `07_known_vendor_new_layout.pdf` | A known vendor in a layout the samples do not use | Approved |
 
-Files 01 to 05 are the attachments of the five inbox emails, so uploading one you already processed from the inbox comes back as a duplicate. That is the correct result.
+Files 01 to 05 are the attachments of the five inbox emails, so uploading one you already processed from the inbox comes back as a duplicate. That is the correct result. To run them fresh, use **Start over** first.
 
 ## How it decides
 
