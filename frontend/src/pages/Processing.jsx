@@ -1,11 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Upload, Mail, Smartphone, ChevronDown, Check, X, AlertTriangle, EyeOff, Eye, RotateCw } from 'lucide-react'
+import { Upload, Mail, Smartphone, ChevronDown, Check, Flag, Minus, EyeOff, Eye, RotateCw } from 'lucide-react'
 import { get, post, tooBig } from '../api.js'
 import { DecisionCard, DocViewer, PageHead, StatusChip, inr } from '../ui.jsx'
 import { go } from '../App.jsx'
+import { StepIcon, StepLegend, stepKinds } from '../runner.jsx'
 
 const STAGES = ['Receive', 'Route', 'Read', 'Classify', 'Protect', 'Extract', 'Check extraction', 'Identify vendor',
   'Match PO and receipt', 'Apply rules', 'Decide', 'Act']
+// A word next to the step name for anything that is not a plain pass, so a flag (the invoice has a problem) is never
+// mistaken for a step that could not run.
+const TAG = { problem: ['Problem found', 'text-alert'], look: ['Needs a look', 'text-hold'], blocked: ['Could not run', 'text-ink-2'],
+  fallback: ['Done without the AI model', 'text-ink-3'], skipped: ['Skipped', 'text-ink-3'], notrun: ['Not run', 'text-ink-3'] }
 const ROUTE = { einvoice: 'Signed e-invoice QR and text layer', text: 'PDF text layer', scan: 'Scan, read with OCR', photo: 'Photo, straightened and read with OCR', docx: 'Word document' }
 
 function Detail({ d }) {
@@ -15,7 +20,7 @@ function Detail({ d }) {
       <ul className="space-y-1.5">
         {d.map((r) => (
           <li key={r.rule} className="grid grid-cols-[18px_1fr] gap-2 text-[12.5px]">
-            {r.outcome === 'pass' ? <Check size={15} className="mt-0.5 text-vouch" /> : r.outcome === 'fail' ? <X size={15} className="mt-0.5 text-alert" /> : r.outcome === 'warn' ? <AlertTriangle size={14} className="mt-0.5 text-hold" /> : <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-ink-3" />}
+            {r.outcome === 'pass' ? <Check size={15} className="mt-0.5 text-vouch" /> : r.outcome === 'fail' ? <Flag size={13} className="mt-1 text-alert" fill="currentColor" /> : r.outcome === 'warn' ? <Flag size={13} className="mt-1 text-hold" fill="currentColor" /> : <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-ink-3" />}
             <span><span className="font-medium text-ink">{r.title}.</span> <span className="text-ink-2">{r.detail}</span></span>
           </li>
         ))}
@@ -93,7 +98,7 @@ export default function Processing({ runId }) {
   const t0 = events[0] ? new Date(events[0].ts).getTime() : null
   const protect = events.find((e) => e.stage === 'Protect')?.detail?.masked_text
   const errorEv = events.find((e) => e.stage_no === 99)
-  const doneCount = events.filter((e) => e.stage_no < 99).length
+  const kinds = stepKinds(events, live)
 
   return (
     <div className="max-w-[1320px]">
@@ -120,27 +125,23 @@ export default function Processing({ runId }) {
               <button className="btn" onClick={() => go(`invoice/${inv.invoice_id}`)}>Open invoice</button>
               {['hold', 'security', 'signoff'].includes(inv.outcome) && <button className="btn-ink" onClick={() => go('exceptions')}>Go to exception</button>}
             </>} />
-            {errorEv && <p className="rounded-lg border border-alert/30 bg-alert-50 px-3 py-2 text-[13px] text-alert">{errorEv.summary}</p>}
+            {errorEv && <p className="flex items-start gap-2 rounded-lg border border-line-2 bg-white px-3 py-2 text-[13px] text-ink"><Minus size={15} className="mt-0.5 shrink-0 text-ink-2" aria-hidden="true" />{errorEv.summary}</p>}
 
             <section className="panel py-2" aria-label="Steps">
+              <StepLegend className="border-b border-line px-4 pb-2.5 pt-1.5" />
               <ol>
                 {STAGES.map((name, i) => {
                   const e = events.find((x) => x.stage_no === i + 1)
-                  const state = e ? e.status : live && doneCount === i ? 'running' : 'pending'
+                  const state = kinds[i]
                   const last = i === STAGES.length - 1
                   return (
                     <li key={name} className="relative grid grid-cols-[28px_1fr] px-4">
                       {!last && <span className={`absolute left-[29px] top-[26px] h-[calc(100%-14px)] w-px ${e ? 'bg-line-2' : 'bg-line'}`} aria-hidden="true" />}
-                      <span className="pt-[11px]">
-                        {state === 'ok' && <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-vouch text-white"><Check size={12} strokeWidth={3} /></span>}
-                        {state === 'warn' && <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-hold text-white"><AlertTriangle size={10} strokeWidth={3} /></span>}
-                        {state === 'fail' && <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-alert text-white"><X size={12} strokeWidth={3} /></span>}
-                        {state === 'running' && <span className="running-dot block h-[18px] w-[18px] rounded-full border-[5px] border-ink bg-white" />}
-                        {state === 'pending' && <span className="block h-[18px] w-[18px] rounded-full border-2 border-line-2 bg-white" />}
-                      </span>
+                      <span className="relative pt-[11px]"><StepIcon kind={state} size="lg" /></span>
                       <div className="min-w-0 py-2">
                         <button className="flex w-full items-baseline gap-3 text-left" onClick={() => e?.detail && setOpen((o) => ({ ...o, [i]: !o[i] }))} aria-expanded={!!open[i]}>
-                          <span className={`text-[13.5px] font-medium ${e || state === 'running' ? 'text-ink' : 'text-ink-3'}`}>{name}</span>
+                          <span className={`text-[13.5px] font-medium ${(e && state !== 'skipped') || state === 'running' ? 'text-ink' : 'text-ink-3'}`}>{name}</span>
+                          {TAG[state] && <span className={`text-[12px] font-medium ${TAG[state][1]}`}>{TAG[state][0]}</span>}
                           {e?.detail && <ChevronDown size={14} className={`text-ink-3 transition ${open[i] ? 'rotate-180' : ''}`} aria-hidden="true" />}
                           {e && t0 && <span className="ml-auto text-[12px] text-ink-3">{((new Date(e.ts).getTime() - t0) / 1000).toFixed(0)} s</span>}
                         </button>

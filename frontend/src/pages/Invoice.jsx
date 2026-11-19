@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { ArrowLeft, Check, X, AlertTriangle, Activity } from 'lucide-react'
+import { ArrowLeft, Check, Flag, Activity } from 'lucide-react'
 import { get } from '../api.js'
 import { DecisionCard, DocViewer, Panel, StatusChip, inr, fmtDate, fmtTime, fmtDay } from '../ui.jsx'
 import { Draft } from './Exceptions.jsx'
@@ -13,8 +13,9 @@ const OWNER = { ap: 'AP desk', procurement: 'Procurement', stores: 'Stores', ven
 
 function Icon({ o }) {
   if (o === 'pass') return <Check size={15} className="mt-0.5 text-vouch" />
-  if (o === 'fail') return <X size={15} className="mt-0.5 text-alert" />
-  if (o === 'warn') return <AlertTriangle size={14} className="mt-0.5 text-hold" />
+  // a flag: the check ran and found a problem with the invoice (never a cross, which reads as "the system broke")
+  if (o === 'fail') return <Flag size={13} className="mt-1 text-alert" fill="currentColor" />
+  if (o === 'warn') return <Flag size={13} className="mt-1 text-hold" fill="currentColor" />
   return <span className="ml-1 mt-2 h-1.5 w-1.5 rounded-full bg-ink-3" />
 }
 

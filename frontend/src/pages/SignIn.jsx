@@ -11,7 +11,7 @@ export default function SignIn() {
         <div className="mb-8 flex items-center gap-2.5"><Logo size={34} /><span className="text-[22px] font-semibold tracking-tight">Vouch</span></div>
         <div className="panel p-6">
           <h1 className="text-[18px] font-semibold">Sign in to Sharma Components</h1>
-          <p className="mt-1 text-[13px] text-ink-2">Choose your account</p>
+          <p className="mt-1 text-[13px] leading-snug text-ink-2">This is a demo with sample data, so there is no password. Start with Ananya to process invoices.</p>
           <ul className="mt-5 divide-y divide-line overflow-hidden rounded-lg border border-line">
             {USERS.map((u) => (
               <li key={u.id}>
@@ -27,7 +27,7 @@ export default function SignIn() {
             ))}
           </ul>
         </div>
-        <p className="mt-4 text-center text-[12px] text-ink-3">Access is managed by your finance administrator</p>
+        <p className="mt-4 text-center text-[12px] text-ink-3">Neha can release security holds and restore the starting data. Vikram can see everything but change nothing.</p>
       </div>
     </div>
   )

@@ -12,6 +12,7 @@ import SignIn from './pages/SignIn.jsx'
 import { AuthProvider, useAuth, Avatar, USERS } from './auth.jsx'
 import { Logo } from './ui.jsx'
 import { get, post } from './api.js'
+import { RunnerProvider, useRunner } from './runner.jsx'
 
 const NAV = [
   ['overview', 'Overview', LayoutGrid], ['inbox', 'Inbox', InboxIcon], ['processing', 'Live processing', Activity],
@@ -96,6 +97,7 @@ function PrivacyStatus() {
 
 function Shell() {
   const { user } = useAuth()
+  const { busyCount } = useRunner()
   const [page, arg] = useRoute()
   const [open, setOpen] = useState(0)
   useEffect(() => {
@@ -119,6 +121,11 @@ function Shell() {
               <Icon size={17} strokeWidth={active === k ? 2.2 : 1.8} aria-hidden="true" />
               {label}
               {k === 'exceptions' && open > 0 && <span className="ml-auto rounded-full bg-hold-50 px-1.5 text-[11.5px] font-semibold text-hold">{open}</span>}
+              {k === 'inbox' && busyCount > 0 && (
+                <span className="ml-auto inline-flex items-center gap-1 text-[11.5px] font-medium text-ink-2" title={`${busyCount} processing`}>
+                  <span className="running-dot h-1.5 w-1.5 rounded-full bg-ink" aria-hidden="true" />{busyCount}
+                </span>
+              )}
             </a>
           ))}
         </nav>
@@ -142,5 +149,5 @@ function Shell() {
 }
 
 export default function App() {
-  return <AuthProvider><Shell /></AuthProvider>
+  return <AuthProvider><RunnerProvider><Shell /></RunnerProvider></AuthProvider>
 }

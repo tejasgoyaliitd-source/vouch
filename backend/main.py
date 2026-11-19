@@ -5,6 +5,7 @@ import csv
 import os
 import io
 import json
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -18,13 +19,25 @@ from ap import db, pipeline, rules
 
 SAMPLES = Path(__file__).resolve().parents[1] / "samples"
 DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
-SAMPLE_INFO = {  # file: (case name, vendor, how it arrives, format, what the case is about)
-    "happy_acme_einvoice.eml": ("Clean e-invoice", "Acme Supplies", "billing@acmesupplies.com", "E-invoice PDF", "Matches PO and receipts"),
-    "e1_bank_change.eml": ("Changed bank details", "Acme Supplies", "billing@acme-supp1ies.com", "E-invoice PDF", "New account, lookalike sender"),
-    "e2_po_overbilled.eml": ("Billed past the PO", "Bharat Steel Traders", "billing@bharatsteel.co.in", "PDF", "Second invoice on one PO"),
-    "e3_resent_scan.eml": ("Resent as a scan", "Northwind IT Services", "accounts@northwindit.in", "Scanned PDF", "Paid invoice sent again"),
-    "IMG_2041.jpg": ("Phone photo, no PO", "Kumar Packaging", "Uploaded from WhatsApp", "Photo", "No PO number, GST type"),
+SAMPLE_INFO = {  # file: (case name, vendor, how it arrives, format, what the case is about, expected outcome)
+    "happy_acme_einvoice.eml": ("Clean e-invoice", "Acme Supplies", "billing@acmesupplies.com", "E-invoice PDF", "Matches PO and receipts", "approved"),
+    "e1_bank_change.eml": ("Changed bank details", "Acme Supplies", "billing@acme-supp1ies.com", "E-invoice PDF", "New account, lookalike sender", "security"),
+    "e2_po_overbilled.eml": ("Billed past the PO", "Bharat Steel Traders", "billing@bharatsteel.co.in", "PDF", "Second invoice on one PO", "hold"),
+    "e3_resent_scan.eml": ("Resent as a scan", "Northwind IT Services", "accounts@northwindit.in", "Scanned PDF", "Paid invoice sent again", "rejected"),
+    "IMG_2041.jpg": ("Phone photo, no PO", "Kumar Packaging", "Uploaded from WhatsApp", "Photo", "No PO number, GST type", "hold"),
 }
+# Test files for evaluators (samples/test_pack, built by scripts/make_test_pack.py): file, what it tests, expected outcome
+TEST_PACK = [
+    ("01_clean_einvoice.pdf", "Signed e-invoice that matches the PO, goods receipts and price", "approved"),
+    ("02_bank_details_changed.pdf", "Same vendor and amount, but a bank account the vendor master does not have", "security"),
+    ("03_billed_past_po.pdf", "Second invoice on one PO that bills 10 units more than were ordered", "hold"),
+    ("04_paid_invoice_resent_as_scan.pdf", "An invoice already paid, sent again as a scan with the number written differently", "rejected"),
+    ("05_whatsapp_photo_no_po.jpg", "Tilted phone photo, no PO number, and the wrong type of GST charged", "hold"),
+    ("06_vendor_not_onboarded.pdf", "A supplier nobody has onboarded, with no PO quoted", "hold"),
+    ("07_known_vendor_new_layout.pdf", "A known vendor in a layout the samples do not use (Invoice #, Dated, Amount payable)", "approved"),
+]
+TEST_DIR = SAMPLES / "test_pack"
+EXPECT_WORDS = {"approved": "approved", "security": "security hold", "hold": "on hold", "rejected": "rejected", "signoff": "needs sign-off"}
 THUMBS = SAMPLES / "_thumbs"
 
 app = FastAPI(title="AP Desk")
@@ -76,15 +89,53 @@ def reset():
 def samples():
     from ap.intake import parse_eml
     out = []
-    for f, (n, v, s, fm, a) in SAMPLE_INFO.items():
+    for f, (n, v, s, fm, a, x) in SAMPLE_INFO.items():
         p = SAMPLES / f
         if not p.exists():
             continue
         m = parse_eml(p.read_bytes()) if f.endswith(".eml") else None
-        out.append(dict(file=f, name=n, vendor=v, source=s, format=fm, about=a, channel="email" if m else "upload",
+        out.append(dict(file=f, name=n, vendor=v, source=s, format=fm, about=a, expect=x, channel="email" if m else "upload",
                         subject=m["subject"] if m else "Invoice photo shared on WhatsApp", received_at=m["received_at"] if m else "2026-11-14T11:34:00+05:30",
-                        attachment=m["attachments"][0][0] if m else "IMG_2041.jpg", preview=(m["body"].strip().splitlines() or [""])[0] if m else "Photo shared on WhatsApp"))
+                        attachment=m["attachments"][0][0] if m else "IMG_2041.jpg", preview=(m["body"].strip().splitlines() or [""])[0] if m else "Photo shared on WhatsApp",
+                        run_id=_sample_run(f)))
     return out
+
+
+def _sample_run(name):
+    """The run this inbox item already has, if any (matched on the invoice file's fingerprint)."""
+    sha = pipeline.content_sha((SAMPLES / name).read_bytes(), name)
+    row = db.one("""SELECT r.run_id FROM documents d JOIN runs r ON r.doc_id=d.doc_id
+                    WHERE d.sha256=? AND r.status<>'error' ORDER BY r.started_at LIMIT 1""", (sha,))
+    return row["run_id"] if row else None
+
+
+_sample_lock = threading.Lock()
+
+
+@app.get("/api/test-pack")
+def test_pack():
+    return [dict(file=f, tests=t, expect=x, kb=round((TEST_DIR / f).stat().st_size / 1024)) for f, t, x in TEST_PACK if (TEST_DIR / f).exists()]
+
+
+@app.get("/api/test-pack.zip")
+def test_pack_zip():
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for f, t, x in TEST_PACK:
+            if (TEST_DIR / f).exists():
+                z.write(TEST_DIR / f, f"vouch_test_files/{f}")
+        notes = [f"{f}: {t}. Expected: {EXPECT_WORDS[x]}." for f, t, x in TEST_PACK]
+        z.writestr("vouch_test_files/README.txt", "Upload any of these in the Vouch inbox. Expected results:\n\n" + "\n".join(notes) + "\n")
+    return StreamingResponse(iter([buf.getvalue()]), media_type="application/zip",
+                             headers={"Content-Disposition": "attachment; filename=vouch_test_files.zip"})
+
+
+@app.get("/api/test-pack/{name}")
+def test_pack_file(name: str):
+    if name not in {f for f, _, _ in TEST_PACK} or not (TEST_DIR / name).exists():
+        raise HTTPException(404, "Unknown test file")
+    return FileResponse(TEST_DIR / name, filename=name)
 
 
 @app.get("/api/samples/{name}/thumb")
@@ -114,7 +165,24 @@ def sample_thumb(name: str):
 def run_sample(name: str):
     if name not in SAMPLE_INFO:
         raise HTTPException(404, "Unknown sample")
-    return {"run_id": pipeline.start((SAMPLES / name).read_bytes(), name)}
+    with _sample_lock:  # an inbox email is processed once, even if two tabs (or Process all and a click) ask together
+        return {"run_id": _sample_run(name) or pipeline.start((SAMPLES / name).read_bytes(), name)}
+
+
+@app.post("/api/inbox/upload")
+async def inbox_upload(file: UploadFile = File(...)):
+    """A file arrives in the inbox. It is stored but not processed; the Inbox decides when (by hand or on arrival)."""
+    data = await file.read()
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(413, "File too large (15 MB max)")
+    return {"doc_id": pipeline.ingest(data, file.filename or "upload")}
+
+
+@app.post("/api/runs/document/{doc_id}")
+def run_document(doc_id: int):
+    if not db.one("SELECT doc_id FROM documents WHERE doc_id=?", (doc_id,)):
+        raise HTTPException(404, "Unknown document")
+    return {"run_id": pipeline.start_doc(doc_id)}
 
 
 @app.post("/api/runs/upload")
@@ -156,9 +224,17 @@ async def run_events(run_id: str):
 
 @app.get("/api/documents")
 def documents():
-    return db.q("""SELECT d.doc_id, d.channel, d.sender, d.subject, d.received_at, d.filename, d.kind, d.classified_as,
-                   r.run_id, i.invoice_id, i.outcome, i.outcome_title FROM documents d LEFT JOIN runs r ON r.doc_id=d.doc_id
+    docs = db.q("""SELECT d.doc_id, d.channel, d.sender, d.subject, d.received_at, d.filename, d.kind, d.classified_as,
+                   r.run_id, r.status run_status, i.invoice_id, i.outcome, i.outcome_title FROM documents d LEFT JOIN runs r ON r.doc_id=d.doc_id
                    LEFT JOIN invoices i ON i.invoice_id=r.invoice_id ORDER BY d.doc_id DESC""")
+    # each run's stage results (1 to 12) so the list can show where a document stopped, without opening it
+    stages = {}
+    for e in db.q("SELECT run_id, stage_no, status, summary FROM events WHERE run_id IS NOT NULL AND stage_no BETWEEN 1 AND 12 ORDER BY event_id"):
+        skipped = e["status"] == "warn" and (e["summary"] or "").startswith("Skipped")  # not needed, not a problem
+        stages.setdefault(e["run_id"], {})[e["stage_no"]] = "skip" if skipped else e["status"]
+    for d in docs:
+        d["stages"] = [stages.get(d["run_id"], {}).get(n) for n in range(1, 13)]
+    return docs
 
 
 @app.get("/api/documents/{doc_id}/preview")

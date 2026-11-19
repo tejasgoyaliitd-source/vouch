@@ -1,6 +1,7 @@
 """The 12-stage run. Each stage writes one event (hash-chained) so the live view and the audit log show
 exactly what happened and why."""
 import contextvars
+import hashlib
 import json
 import os
 import re
@@ -49,15 +50,34 @@ def _thread(run_id):
 
 
 def start(data: bytes, filename: str, channel_hint=None, background=True) -> str:
-    doc_id = ingest(data, filename, channel_hint)
-    run_id = "R-" + uuid.uuid4().hex[:6].upper()
-    queued = background and IN_STREAM
-    db.insert("runs", dict(run_id=run_id, doc_id=doc_id, status="queued" if queued else "running", started_at=db.now()))
+    return start_doc(ingest(data, filename, channel_hint), background)
+
+
+_start_lock = threading.Lock()
+
+
+def start_doc(doc_id: int, background=True) -> str:
+    """Process a stored document. A document is processed once: asking again returns the run it already has."""
+    with _start_lock:
+        existing = db.one("SELECT run_id FROM runs WHERE doc_id=? AND status<>'error' ORDER BY started_at LIMIT 1", (doc_id,))
+        if existing:
+            return existing["run_id"]
+        run_id = "R-" + uuid.uuid4().hex[:6].upper()
+        queued = background and IN_STREAM
+        db.insert("runs", dict(run_id=run_id, doc_id=doc_id, status="queued" if queued else "running", started_at=db.now()))
     if not background:
         _run_safe(run_id)
     elif not queued:
         _thread(run_id)
     return run_id
+
+
+def content_sha(data: bytes, filename: str) -> str:
+    """The fingerprint ingest() would store for this input: the invoice attachment for an email, else the file."""
+    if kind_of(data, filename) == "eml":
+        att = next((b for n, b in parse_eml(data)["attachments"] if kind_of(b, n) in ("pdf", "jpg", "png", "docx")), None)
+        data = att if att is not None else data
+    return hashlib.sha256(data).hexdigest()
 
 
 def claim(run_id) -> bool:
@@ -76,7 +96,9 @@ def _run_safe(run_id):
     try:
         run(run_id)
     except Exception as e:  # never approve on failure: record it and leave the invoice for a person
-        db.add_event(run_id, None, 99, "Error", "fail", f"Run stopped: {type(e).__name__}: {e}. Nothing was approved.")
+        # plain words for the person; the technical error stays in the audit detail for whoever fixes it
+        db.add_event(run_id, None, 99, "Error", "fail", "Vouch hit a problem on its side and stopped before the next step. "
+                     "Nothing was approved. Process it again, or handle this invoice by hand.", dict(error=f"{type(e).__name__}: {e}"))
         db.x("UPDATE runs SET status='error', finished_at=? WHERE run_id=?", (db.now(), run_id))
 
 
@@ -104,7 +126,14 @@ def run(run_id):
 
     # 2 Route + 3 Read
     t = time.time()
-    r = extract.route_and_read(doc["stored_path"], doc["kind"])
+    try:
+        r = extract.route_and_read(doc["stored_path"], doc["kind"])
+    except Exception:  # damaged or password-protected file: say so plainly instead of showing the library error
+        ev("fail", "This file could not be opened. It may be damaged or password protected. Ask the sender to send it again. Nothing was approved.",
+           dict(route="unreadable"))
+        db.x("UPDATE documents SET classified_as=? WHERE doc_id=?", ("unreadable file", doc["doc_id"]))
+        _finish(run_id, None, "rejected")
+        return None
     secs = time.time() - t
     preview = None
     if r["preview"] is not None:
@@ -126,11 +155,12 @@ def run(run_id):
 
     # 4 Classify
     text = "\n".join(x["text"] for x in r["rows"])
-    is_inv = ("invoice" in text.lower() or "bill no" in text.lower()) and "total" in text.lower()
+    low = text.lower()
+    is_inv = (("invoice" in low or "bill no" in low) and ("total" in low or bool(re.search(extract.AMOUNT_DUE, low))))
     db.x("UPDATE documents SET classified_as=? WHERE doc_id=?", ("tax invoice" if is_inv else "not an invoice", doc["doc_id"]))
     misleading = re.search(r"reminder|statement|payment due|bank|overdue", doc["subject"] or "", re.I)
     hint = f" (subject says \"{doc['subject']}\", but the attachment itself is an invoice)" if misleading and is_inv else ""
-    ev("ok" if is_inv else "fail", ("Tax invoice" + hint) if is_inv else "Not an invoice: no invoice title or total found. Ignored.")
+    ev("ok" if is_inv else "fail", ("Tax invoice" + hint) if is_inv else "Not an invoice: no invoice title or amount due found. Nothing was approved; it stays in Processed if someone wants to check it.")
     if not is_inv:
         _finish(run_id, None, "rejected")
         return
@@ -182,7 +212,7 @@ def run(run_id):
         two += f", {len(merge['not_on_page'])} model values not found on the page and dropped" if merge["not_on_page"] else ""
         two += f"; {merge['lines']}." if merge.get("lines") else "."
     else:
-        two = f"Read {len(F)} fields and {len(lines)} line items with the local parser."
+        two = f"Read {len(F)} fields and {len(lines)} line item{'' if len(lines) == 1 else 's'} with the local parser."
     ev("ok" if lowest[0] >= 0.85 else "warn", f"{two} Lowest confidence {lowest[0]:.2f} ({lowest[1].replace('_', ' ')}).",
        dict(fields={k: (v["value"], v["confidence"], v["source"]) for k, v in F.items()}, readers=merge))
 

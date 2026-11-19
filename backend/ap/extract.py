@@ -21,6 +21,8 @@ if Path(_TESS).exists():
     pytesseract.pytesseract.tesseract_cmd = _TESS
 
 NUM = r"\d{1,3}(?:,\d{2,3})*(?:\.\d{2})|\d+\.\d{2}"
+# Other words vendors use for the final amount, besides "Total"
+AMOUNT_DUE = r"amount\s*(?:payable|due)|net\s*payable|balance\s*due|payable\s*amount"
 
 
 # ---------- page images ----------
@@ -224,13 +226,13 @@ def parse_fields(rows, buyer_gstin, source):
                 F[name]["note"] = "OCR misread corrected by position; checksum verified"
     v, r = _find(rows, r"(?:invoice\s*(?:no\.?|#|number)|bill\s*no\.?)\s*[:.]?\s*([A-Z0-9][A-Z0-9/\-]{2,})")
     put("invoice_no", v, r)
-    v, r = _find(rows, r"\bdate\s*[:.]?\s*(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})")
+    v, r = _find(rows, r"\bdated?\s*[:.]?\s*(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})")
     put("invoice_date", v, r)
     v, r = _find(rows, r"\b(PO-\d{3,6})\b", flags=0)
     put("po_no", v, r)
     v, r = _find(rows, rf"sub\s*total\s*[:]?\s*({NUM})")
     put("subtotal", _num(v) if v else None, r, _conf(r, v) if v else None)
-    v, r = _find(rows, rf"(?<!sub)(?<!sub )total\s*(?:\(inr\))?\s*[:]?\s*(?:rs\.?|inr|₹)?\s*({NUM})")
+    v, r = _find(rows, rf"(?:(?<!sub)(?<!sub )total|{AMOUNT_DUE})\s*(?:\(inr\))?\s*[:]?\s*(?:rs\.?|inr|₹)?\s*({NUM})")
     put("total", _num(v) if v else None, r, _conf(r, v) if v else None)
     for r in rows:
         for m in re.finditer(rf"\b([CSI]GST)\s*@?\s*(\d+(?:\.\d+)?)\s*%\s*({NUM})", r["text"], re.I):
